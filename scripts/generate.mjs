@@ -1,0 +1,407 @@
+/**
+ * Generate registry/ + src/generated/ from assets/{crypto,dev,general}.
+ *
+ * - crypto / dev → own sidebar categories (colored brand marks)
+ * - general → topical categories from sibling *.json metadata (same shape as
+ *   common stroke-icon packs: categories[], tags[])
+ */
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  extractSvg,
+  safeScope,
+  scopeSvgMarkup,
+  slugFromFile,
+  toComponentName,
+  wrapStrokeBody,
+} from "./lib/svg-parse.mjs";
+
+/** Icons per data chunk — keeps Vite loads small while scrolling. */
+const CHUNK_SIZE = 64;
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const assetsRoot = join(root, "assets");
+const genRoot = join(root, "src", "generated");
+const regRoot = join(root, "registry");
+const regIcons = join(regRoot, "icons");
+
+/** @type {Map<string, string>} id → owner pack */
+const claimedIds = new Map();
+/** @type {Map<string, string>} componentName → id */
+const claimedNames = new Map();
+
+/**
+ * @param {string} preferredId
+ * @param {string} pack
+ */
+function claimId(preferredId, pack) {
+  let id = preferredId;
+  let n = 2;
+  while (claimedIds.has(id)) {
+    id = `${preferredId}-${n}`;
+    n += 1;
+  }
+  claimedIds.set(id, pack);
+  return id;
+}
+
+/**
+ * @param {string} preferred
+ * @param {string} id
+ */
+function claimComponentName(preferred, id) {
+  let name = preferred;
+  let n = 2;
+  while (claimedNames.has(name)) {
+    name = preferred.replace(/Icon$/, `${n}Icon`);
+    n += 1;
+  }
+  claimedNames.set(name, id);
+  return name;
+}
+
+function titleFromSlug(slug) {
+  return slug
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * @param {string} dir
+ * @param {string} pack
+ * @param {{ stroke?: boolean, categoryFor: (slug: string, meta: any) => string, source: string }} opts
+ */
+async function loadPack(dir, pack, opts) {
+  /** @type {Array<any>} */
+  const entries = [];
+  let files = [];
+  try {
+    files = await readdir(dir);
+  } catch {
+    console.warn(`Skip missing pack: ${dir}`);
+    return entries;
+  }
+
+  const svgs = files.filter((f) => f.toLowerCase().endsWith(".svg")).sort();
+  for (const file of svgs) {
+    const slug = slugFromFile(file);
+    const svgText = await readFile(join(dir, file), "utf8");
+    const { viewBox, body: rawBody } = extractSvg(svgText);
+
+    /** @type {any} */
+    let meta = null;
+    if (opts.stroke) {
+      try {
+        meta = JSON.parse(await readFile(join(dir, `${slug}.json`), "utf8"));
+      } catch {
+        meta = { categories: ["uncategorized"], tags: [] };
+      }
+    }
+
+    const category = opts.categoryFor(slug, meta);
+    const id = claimId(slug, pack);
+    const componentName = claimComponentName(toComponentName(slug), id);
+    const nameEn = titleFromSlug(slug);
+    const scope = safeScope(id);
+    const colorRaw = opts.stroke ? wrapStrokeBody(rawBody) : rawBody;
+    // Scope at build time — gallery scroll must not re-run this work.
+    const colorBody = scopeSvgMarkup(colorRaw, scope);
+    const dims = {
+      viewBox,
+      width: Number(viewBox.split(/[\s,]+/)[2]) || 24,
+      height: Number(viewBox.split(/[\s,]+/)[3]) || 24,
+    };
+
+    entries.push({
+      id,
+      nameFa: nameEn,
+      nameEn,
+      componentName,
+      category,
+      source: opts.source,
+      sourceUrl: `assets/${pack}/${file}`,
+      verificationStatus: "verified",
+      notes: opts.stroke
+        ? "Stroke icon (currentColor)."
+        : "Brand / colored SVG.",
+      tags: Array.isArray(meta?.tags) ? meta.tags : [],
+      categories: Array.isArray(meta?.categories) ? meta.categories : [category],
+      viewBox,
+      aspectRatio: dims.width / dims.height || 1,
+      color: { ...dims, body: colorBody },
+    });
+  }
+
+  console.log(`  ${pack}: ${entries.length} icons`);
+  return entries;
+}
+
+function serialize(value) {
+  return JSON.stringify(value);
+}
+
+/**
+ * @param {string} outDir
+ * @param {string} exportName
+ * @param {Array<any>} entries
+ * @param {Array<{id:string,prefix:string,labelEn:string,labelFa:string,count:number}>} categories
+ */
+async function writePackGenerated(outDir, exportName, entries, categories) {
+  await mkdir(outDir, { recursive: true });
+  await mkdir(join(outDir, "data"), { recursive: true });
+
+  const byCategory = new Map();
+  for (const e of entries) {
+    if (!byCategory.has(e.category)) byCategory.set(e.category, []);
+    byCategory.get(e.category).push(e);
+  }
+
+  const catalogEntries = entries.map((e) => ({
+    id: e.id,
+    nameFa: e.nameFa,
+    nameEn: e.nameEn,
+    componentName: e.componentName,
+    category: e.category,
+    source: e.source,
+    sourceUrl: e.sourceUrl,
+    verificationStatus: e.verificationStatus,
+    notes: e.notes,
+    viewBox: e.viewBox,
+    aspectRatio: e.aspectRatio,
+  }));
+
+  await writeFile(
+    join(outDir, "catalog.ts"),
+    `// Generated by scripts/generate.mjs — do not edit.\n` +
+      `import type { IconCategoryMeta, IconManifestEntry } from "../../types";\n\n` +
+      `export const ${exportName}Categories: IconCategoryMeta[] = ${serialize(categories)};\n\n` +
+      `export const ${exportName}Manifest: IconManifestEntry[] = ${serialize(catalogEntries)};\n`,
+  );
+
+  // Chunked data modules + per-icon → chunk map (avoids loading 2k icons at once).
+  /** @type {Record<string, string>} */
+  const iconChunkMap = {};
+  /** @type {string[]} */
+  const chunkFiles = [];
+  let chunkIndex = 0;
+  /** @type {Array<any>} */
+  let bucket = [];
+
+  const flushChunk = async () => {
+    if (bucket.length === 0) return;
+    const fileSafe = `c${chunkIndex}`;
+    /** @type {Record<string, any>} */
+    const data = {};
+    for (const e of bucket) {
+      data[e.id] = e.color;
+      iconChunkMap[e.id] = fileSafe;
+    }
+    await writeFile(
+      join(outDir, "data", `${fileSafe}.ts`),
+      `// Generated by scripts/generate.mjs — do not edit.\n` +
+        `import type { IconGlyphData } from "../../../types";\n\n` +
+        `export const data: Record<string, IconGlyphData> = ${serialize(data)};\n`,
+    );
+    chunkFiles.push(fileSafe);
+    chunkIndex += 1;
+    bucket = [];
+  };
+
+  // Prefer category-local chunking so a topical section stays warm in cache.
+  for (const [, list] of [...byCategory.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    for (const e of list) {
+      bucket.push(e);
+      if (bucket.length >= CHUNK_SIZE) await flushChunk();
+    }
+    await flushChunk();
+  }
+
+  const loaderLines = [
+    `// Generated by scripts/generate.mjs — do not edit.`,
+    `import type { IconGlyphData } from "../../types";`,
+    ``,
+    `export const iconChunkMap: Record<string, string> = ${serialize(iconChunkMap)};`,
+    ``,
+    `const chunkImporters: Record<`,
+    `  string,`,
+    `  () => Promise<{ data: Record<string, IconGlyphData> }>`,
+    `> = {`,
+  ];
+  for (const fileSafe of chunkFiles) {
+    loaderLines.push(
+      `  ${JSON.stringify(fileSafe)}: () => import("./data/${fileSafe}"),`,
+    );
+  }
+  loaderLines.push(
+    `};`,
+    ``,
+    `export function loadIconChunk(chunkId: string) {`,
+    `  const load = chunkImporters[chunkId];`,
+    `  if (!load) return Promise.resolve({ data: {} as Record<string, IconGlyphData> });`,
+    `  return load();`,
+    `}`,
+    ``,
+    `/** @deprecated category-sized loads — prefer loadIconChunk via iconChunkMap */`,
+    `export const categoryDataLoaders: Record<`,
+    `  string,`,
+    `  () => Promise<{ data: Record<string, IconGlyphData> }>`,
+    `> = {};`,
+    ``,
+  );
+  await writeFile(join(outDir, "loaders.ts"), loaderLines.join("\n"));
+
+  await writeFile(
+    join(outDir, "index.ts"),
+    `// Generated by scripts/generate.mjs — do not edit.\n` +
+      `export { ${exportName}Categories, ${exportName}Manifest } from "./catalog";\n` +
+      `export { iconChunkMap, loadIconChunk, categoryDataLoaders } from "./loaders";\n`,
+  );
+}
+
+async function main() {
+  console.log("→ Scanning assets…");
+
+  await rm(genRoot, { recursive: true, force: true });
+  await rm(regIcons, { recursive: true, force: true });
+  await mkdir(genRoot, { recursive: true });
+  await mkdir(regIcons, { recursive: true });
+
+  const cryptoEntries = await loadPack(join(assetsRoot, "crypto"), "crypto", {
+    source: "crypto",
+    categoryFor: () => "crypto",
+  });
+
+  const devEntries = await loadPack(join(assetsRoot, "dev"), "dev", {
+    source: "dev",
+    categoryFor: () => "dev",
+  });
+
+  const generalEntries = await loadPack(
+    join(assetsRoot, "general"),
+    "general",
+    {
+      source: "general",
+      stroke: true,
+      categoryFor: (_slug, meta) => {
+        const cats = Array.isArray(meta?.categories) ? meta.categories : [];
+        return typeof cats[0] === "string" && cats[0] ? cats[0] : "uncategorized";
+      },
+    },
+  );
+
+  const all = [...cryptoEntries, ...devEntries, ...generalEntries];
+
+  // Registry payloads for CLI
+  console.log("→ Writing registry…");
+  const indexIcons = [];
+  for (const e of all) {
+    const file = `icons/${e.id}.json`;
+    const payload = {
+      id: e.id,
+      nameFa: e.nameFa,
+      nameEn: e.nameEn,
+      componentName: e.componentName,
+      category: e.category,
+      tags: e.tags,
+      color: { viewBox: e.color.viewBox, body: e.color.body },
+    };
+    await writeFile(join(regRoot, file), JSON.stringify(payload));
+    indexIcons.push({
+      id: e.id,
+      nameFa: e.nameFa,
+      nameEn: e.nameEn,
+      componentName: e.componentName,
+      category: e.category,
+      file,
+    });
+  }
+
+  indexIcons.sort((a, b) => a.id.localeCompare(b.id));
+  await writeFile(
+    join(regRoot, "index.json"),
+    JSON.stringify(
+      {
+        name: "@sonojs/icons",
+        version: 1,
+        count: indexIcons.length,
+        icons: indexIcons,
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+
+  // Generated sources for gallery
+  console.log("→ Writing src/generated…");
+
+  await writePackGenerated(
+    join(genRoot, "crypto"),
+    "crypto",
+    cryptoEntries,
+    [
+      {
+        id: "crypto",
+        prefix: "crypto",
+        labelEn: "Crypto",
+        labelFa: "Crypto",
+        count: cryptoEntries.length,
+      },
+    ],
+  );
+
+  await writePackGenerated(join(genRoot, "dev"), "dev", devEntries, [
+    {
+      id: "dev",
+      prefix: "dev",
+      labelEn: "Dev",
+      labelFa: "Dev",
+      count: devEntries.length,
+    },
+  ]);
+
+  /** @type {Map<string, number>} */
+  const generalCatCounts = new Map();
+  for (const e of generalEntries) {
+    generalCatCounts.set(e.category, (generalCatCounts.get(e.category) ?? 0) + 1);
+  }
+  const generalCategories = [...generalCatCounts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([id, count]) => ({
+      id,
+      prefix: id,
+      labelEn: titleFromSlug(id),
+      labelFa: titleFromSlug(id),
+      count,
+    }));
+
+  await writePackGenerated(
+    join(genRoot, "general"),
+    "general",
+    generalEntries,
+    generalCategories,
+  );
+
+  // Meta for display groups (gallery sidebar order)
+  const displayMeta = {
+    cryptoCount: cryptoEntries.length,
+    devCount: devEntries.length,
+    generalCategories: generalCategories.map((c) => c.id),
+  };
+  await writeFile(
+    join(genRoot, "display-meta.ts"),
+    `// Generated by scripts/generate.mjs — do not edit.\n` +
+      `export const generatedDisplayMeta = ${serialize(displayMeta)} as const;\n`,
+  );
+
+  console.log(`\n✓ Generated ${all.length} icons → registry/ + src/generated/`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

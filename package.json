@@ -1,26 +1,67 @@
 {
-  "name": "01",
+  "name": "@sonojs/icons",
   "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+  "description": "SonoJS brand React icons — CLI copy into your project.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "sonojs-icons": "./cli/index.mjs"
   },
-  "dependencies": {
-    "next": "16.2.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+  "files": [
+    "cli",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "dev": "vite --config vite.config.ts",
+    "build": "tsup && node scripts/generate-dts.mjs",
+    "build:web": "vite build --config vite.config.ts",
+    "build:icons": "npm run generate && npm run build",
+    "generate:dts": "node scripts/generate-dts.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pack:check": "npm pack --dry-run"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@eslint/js": "^9.17.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "jsdom": "^25.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "svgo": "^4.1.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vite": "^6.0.6",
+    "vitest": "^2.1.8"
+  },
+  "keywords": [
+    "react",
+    "icons",
+    "sonojs",
+    "brands",
+    "svg",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=18"
   }
 }

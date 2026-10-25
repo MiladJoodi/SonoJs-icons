@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# @sonojs/icons
 
-## Getting Started
+SonoJS brand React icons. Browse the gallery locally, then copy icon components into your app with the CLI.
 
-First, run the development server:
+## Install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm i @sonojs/icons
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+You do not import icons from the package at runtime. Use the CLI to copy self-contained `.tsx` files into your project.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Add icons
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npx @sonojs/icons add my-icon
+npx @sonojs/icons add icon-one icon-two
+```
 
-## Learn More
+### Output directory
 
-To learn more about Next.js, take a look at the following resources:
+| Project layout | Icons land in |
+|----------------|---------------|
+| Has `./src` | `src/components/icons` |
+| Otherwise | `components/icons` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Usage after add
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```tsx
+import { MyIcon } from "@/components/icons/MyIcon";
 
-## Deploy on Vercel
+<MyIcon size={32} title="My icon" className="brand-icon" />
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Props:** `size`, `title`, `className` (plus standard SVG props). Icons keep their original artwork (brand colors or stroke marks).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Options
+
+```bash
+npx @sonojs/icons add my-icon --out src/components/icons
+npx @sonojs/icons add my-icon --force
+npx @sonojs/icons add my-icon --registry ./registry
+```
+
+## Local gallery
+
+```bash
+npm install
+npm run dev
+```
+
+Open the URL Vite prints (default `http://localhost:5173`).
+
+## Adding artwork
+
+Sources live under `assets/`:
+
+| Folder | Role |
+|--------|------|
+| `assets/crypto/` | Crypto brands → sidebar **Crypto** |
+| `assets/dev/` | Dev / product marks → sidebar **Dev** |
+| `assets/general/` | Stroke icons + optional `*.json` metadata → topical categories (`arrows`, `files`, …) |
+
+```bash
+npm run generate   # rebuilds registry/ + src/generated/
+npm run dev        # gallery
+```
+
+## License
+
+MIT
