@@ -67,12 +67,56 @@ function readStoredCustomizer(): typeof CUSTOMIZER_DEFAULTS {
   }
 }
 
-function pageFromHash(): PageId {
-  const h = window.location.hash.replace(/^#\/?/, "").toLowerCase();
-  if (h === "guide" || h === "packages" || h === "icons") {
-    return h;
+const ICON_ID_SET = new Set(iconManifest.map((e) => e.id));
+
+type RouteState = { page: PageId; iconId: string | null };
+
+/** `#guide` | `#packages` | `#icons` | `#icons/<id>` */
+function parseHash(hash = window.location.hash): RouteState {
+  const raw = hash.replace(/^#\/?/, "").trim();
+  if (!raw) return { page: "icons", iconId: null };
+
+  let segments: string[];
+  try {
+    segments = raw.split("/").map((s) => decodeURIComponent(s));
+  } catch {
+    return { page: "icons", iconId: null };
   }
-  return "icons";
+
+  const head = (segments[0] ?? "").toLowerCase();
+  if (head === "guide" || head === "packages") {
+    return { page: head, iconId: null };
+  }
+
+  // `#icons` or `#icons/<id>` (id may contain `/` — join remainder)
+  if (head === "icons") {
+    const rest = segments.slice(1).join("/");
+    return { page: "icons", iconId: rest || null };
+  }
+
+  return { page: "icons", iconId: null };
+}
+
+function hashFor(page: PageId, iconId: string | null): string {
+  if (page === "guide") return "#guide";
+  if (page === "packages") return "#packages";
+  if (iconId) return `#icons/${encodeURIComponent(iconId)}`;
+  return "#icons";
+}
+
+function resolveIconId(raw: string | null): string | null {
+  if (!raw) return null;
+  if (ICON_ID_SET.has(raw)) return raw;
+  const lower = raw.toLowerCase();
+  if (lower !== raw && ICON_ID_SET.has(lower)) return lower;
+  return null;
+}
+
+function writeHash(page: PageId, iconId: string | null, mode: "push" | "replace") {
+  const next = hashFor(page, iconId);
+  if (window.location.hash === next) return;
+  if (mode === "replace") window.history.replaceState(null, "", next);
+  else window.history.pushState(null, "", next);
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -84,9 +128,29 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-const REPO_URL = "https://github.com/sonojs/icons";
-const REPO_API = "https://api.github.com/repos/sonojs/icons";
-const DOCS_URL = "https://sonojs.com/docs";
+/** Stars + GitHub button → main SonoJS repo (same as sonojs.com header). */
+const SONO_GITHUB_URL = "https://github.com/MiladJoodi/SonoJS";
+const SONO_GITHUB_API = "https://api.github.com/repos/MiladJoodi/SonoJS";
+/** Issues / suggest-an-icon → this icons repo. */
+const ICONS_REPO_URL = "https://github.com/MiladJoodi/SonoJs-icons";
+const SONO_ORIGIN = "https://sonojs.com";
+
+/** Same order/labels as sonojs.com site header. */
+const SITE_NAV = [
+  { href: `${SONO_ORIGIN}/docs`, label: "Docs" },
+  { href: `${SONO_ORIGIN}/docs/components`, label: "Components" },
+  { href: `${SONO_ORIGIN}/blocks`, label: "Blocks" },
+  { href: `${SONO_ORIGIN}/charts`, label: "Charts" },
+  { href: `${SONO_ORIGIN}/tools`, label: "Tools" },
+  { href: "#icons", label: "Icons", current: true as const },
+] as const;
+
+function formatGithubStars(count: number): string {
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(count);
+}
 
 function GitHubIcon() {
   return (
@@ -165,70 +229,6 @@ function MenuIcon() {
   );
 }
 
-function NavGuideIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function NavIconsToggleIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect
-        x="3"
-        y="3"
-        width="7"
-        height="7"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <rect
-        x="14"
-        y="3"
-        width="7"
-        height="7"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <rect
-        x="3"
-        y="14"
-        width="7"
-        height="7"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <rect
-        x="14"
-        y="14"
-        width="7"
-        height="7"
-        rx="1.5"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
 function SearchClearIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -264,27 +264,6 @@ function DrawerCloseIcon() {
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function DocsNavIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );
@@ -388,7 +367,24 @@ function hasPersianScript(value: string): boolean {
 }
 
 export function App() {
-  const [page, setPage] = useState<PageId>(() => pageFromHash());
+  const initialRoute = (() => {
+    const parsed = parseHash();
+    const iconId = resolveIconId(parsed.iconId);
+    return {
+      page: parsed.page,
+      iconId: parsed.page === "icons" ? iconId : null,
+      needsNormalize:
+        !window.location.hash ||
+        (parsed.iconId != null && iconId == null) ||
+        (parsed.page !== "icons" && parsed.iconId != null) ||
+        hashFor(
+          parsed.page,
+          parsed.page === "icons" ? iconId : null,
+        ) !== window.location.hash,
+    };
+  })();
+
+  const [page, setPage] = useState<PageId>(() => initialRoute.page);
   const [query, setQuery] = useState("");
   /** Debounced copy of `query` — drives filtering / virtual gallery. */
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -403,7 +399,9 @@ export function App() {
   const previewRenderPx = Math.round(
     (previewSize / 48) * PREVIEW_FRAME_PX,
   );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => initialRoute.iconId,
+  );
   const [navOpen, setNavOpen] = useState(false);
   const [catDrawerOpen, setCatDrawerOpen] = useState(false);
   const [, setReady] = useState(false);
@@ -424,33 +422,71 @@ export function App() {
   const scrollingToRef = useRef(false);
   const pendingScrollRef = useRef<DisplayGroupId | "all" | null>(null);
   const [scrollNonce, setScrollNonce] = useState(0);
+  /** Skip echoing URL→state when we just wrote the hash ourselves. */
+  const urlWriteLock = useRef(false);
+
+  const applyRoute = useCallback((route: RouteState, mode: "push" | "replace") => {
+    const iconId =
+      route.page === "icons" ? resolveIconId(route.iconId) : null;
+    setPage(route.page);
+    setSelectedId(iconId);
+    urlWriteLock.current = true;
+    writeHash(route.page, iconId, mode);
+    queueMicrotask(() => {
+      urlWriteLock.current = false;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setCopiedKind(null);
+    applyRoute({ page: "icons", iconId: null }, "push");
+  }, [applyRoute]);
 
   const go = (next: PageId) => {
-    setPage(next);
     setNavOpen(false);
     setCatDrawerOpen(false);
-    setSelectedId(null);
-    const hash = next === "icons" ? "#icons" : `#${next}`;
-    if (window.location.hash !== hash) {
-      window.history.pushState(null, "", hash);
-    }
+    setCopiedKind(null);
+    applyRoute({ page: next, iconId: null }, "push");
   };
 
   useEffect(() => {
-    const onHash = () => setPage(pageFromHash());
-    window.addEventListener("hashchange", onHash);
-    if (!window.location.hash) {
-      window.history.replaceState(null, "", "#icons");
+    if (initialRoute.needsNormalize) {
+      writeHash(initialRoute.page, initialRoute.iconId, "replace");
     }
-    return () => window.removeEventListener("hashchange", onHash);
+
+    const syncFromUrl = () => {
+      if (urlWriteLock.current) return;
+      const parsed = parseHash();
+      const iconId =
+        parsed.page === "icons" ? resolveIconId(parsed.iconId) : null;
+      if (parsed.iconId && !iconId) {
+        writeHash(parsed.page, null, "replace");
+        setPage(parsed.page);
+        setSelectedId(null);
+        return;
+      }
+      setPage(parsed.page);
+      setSelectedId(iconId);
+    };
+
+    window.addEventListener("hashchange", syncFromUrl);
+    window.addEventListener("popstate", syncFromUrl);
+    return () => {
+      window.removeEventListener("hashchange", syncFromUrl);
+      window.removeEventListener("popstate", syncFromUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only URL bootstrap
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(REPO_API, {
-          headers: { Accept: "application/vnd.github+json" },
+        const res = await fetch(SONO_GITHUB_API, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            "User-Agent": "SonoJS-icons-gallery",
+          },
         });
         if (!res.ok) return;
         const data = (await res.json()) as { stargazers_count?: number };
@@ -644,10 +680,27 @@ export function App() {
     setReady(true);
   }, [page]);
 
-  const onSelectIcon = useCallback((id: string) => {
-    setCopiedKind(null);
-    setSelectedId((prev) => (prev === id ? null : id));
-  }, []);
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+
+  const onSelectIcon = useCallback(
+    (id: string) => {
+      setCopiedKind(null);
+      const next = selectedIdRef.current === id ? null : id;
+      applyRoute({ page: "icons", iconId: next }, "push");
+    },
+    [applyRoute],
+  );
+
+  useEffect(() => {
+    const base = "SonoJS Icons";
+    if (!selectedId) {
+      document.title = base;
+      return;
+    }
+    const entry = iconManifest.find((e) => e.id === selectedId);
+    document.title = entry ? `${entry.nameEn} · ${base}` : base;
+  }, [selectedId]);
 
   const onActiveGroup = useCallback((id: DisplayGroupId | "all") => {
     setActiveGroup(id);
@@ -661,14 +714,14 @@ export function App() {
         window.setTimeout(() => searchRef.current?.focus(), 0);
       }
       if (e.key === "Escape") {
-        setSelectedId(null);
+        if (selectedId) clearSelection();
         setNavOpen(false);
         setCatDrawerOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [page]);
+  }, [page, selectedId, clearSelection]);
 
   useEffect(() => {
     if (!catDrawerOpen) return;
@@ -732,76 +785,53 @@ export function App() {
         <div className="site-nav-inner">
           <a
             className="nav-brand"
-            href="#icons"
-            aria-label="SonoJS Icons"
-            onClick={(e) => {
-              e.preventDefault();
-              go("icons");
-              setQuery("");
-              setActiveGroup("all");
-              scrollingToRef.current = false;
-              pendingScrollRef.current = null;
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
+            href="https://sonojs.com/"
+            aria-label="Sono"
           >
-            <span className="nav-brand-stack">
-              <span className="nav-brand-text">SonoJS Icons</span>
-            </span>
+            <img
+              className="nav-brand-logo"
+              src="/images/logos/logo.svg"
+              alt=""
+              aria-hidden
+              width={20}
+              height={22}
+            />
+            <span className="nav-brand-text">Sono</span>
           </a>
 
           <nav className="nav-links" aria-label="Main">
-            <a
-              className={`nav-ext ${page === "icons" ? "is-active" : ""}`}
-              href="#icons"
-              aria-current={page === "icons" ? "page" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                go("icons");
-                setQuery("");
-                setActiveGroup("all");
-                scrollingToRef.current = false;
-                pendingScrollRef.current = null;
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            >
-              <NavIconsToggleIcon />
-              <span>Icons</span>
-            </a>
-            <a
-              className={`nav-ext ${page === "guide" ? "is-active" : ""}`}
-              href="#guide"
-              aria-current={page === "guide" ? "page" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                go("guide");
-              }}
-            >
-              <NavGuideIcon />
-              <span>Guide</span>
-            </a>
-            <a
-              className={`nav-ext ${page === "packages" ? "is-active" : ""}`}
-              href="#packages"
-              aria-current={page === "packages" ? "page" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                go("packages");
-              }}
-            >
-              <span>Packages</span>
-            </a>
-            <a
-              className="nav-ext"
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-            >
-              <DocsNavIcon />
-              <span>Docs</span>
-            </a>
+            {SITE_NAV.map((item) =>
+              "current" in item && item.current ? (
+                <a
+                  key={item.label}
+                  className={`nav-ext ${page === "icons" ? "is-active" : ""}`}
+                  href="#icons"
+                  aria-current={page === "icons" ? "page" : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go("icons");
+                    setQuery("");
+                    setActiveGroup("all");
+                    scrollingToRef.current = false;
+                    pendingScrollRef.current = null;
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  {item.label}
+                </a>
+              ) : (
+                <a
+                  key={item.label}
+                  className="nav-ext"
+                  href={item.href}
+                >
+                  {item.label}
+                </a>
+              ),
+            )}
             <a
               className="nav-contribute"
-              href={`${REPO_URL}/issues/new`}
+              href={`${ICONS_REPO_URL}/issues/new`}
               target="_blank"
               rel="noopener noreferrer nofollow"
             >
@@ -832,19 +862,19 @@ export function App() {
 
             <a
               className="nav-star-btn"
-              href={REPO_URL}
+              href={SONO_GITHUB_URL}
               target="_blank"
-              rel="noopener noreferrer nofollow"
+              rel="noopener noreferrer"
               aria-label={
                 starCount != null
-                  ? `${starCount} stars on GitHub`
+                  ? `GitHub repository, ${formatGithubStars(starCount)} stars`
                   : "GitHub repository"
               }
             >
               <GitHubIcon />
               {starCount != null ? (
                 <span className="nav-star-count" dir="ltr" lang="en">
-                  {starCount}
+                  {formatGithubStars(starCount)}
                 </span>
               ) : null}
             </a>
@@ -892,62 +922,39 @@ export function App() {
               <code>{INSTALL_CMD}</code>
               {installCopied ? <CheckIcon /> : <CopyIcon />}
             </button>
-            <a
-              className={`nav-ext ${page === "icons" ? "is-active" : ""}`}
-              href="#icons"
-              role="menuitem"
-              onClick={(e) => {
-                e.preventDefault();
-                go("icons");
-                setQuery("");
-                setActiveGroup("all");
-                setNavOpen(false);
-              }}
-            >
-              <NavIconsToggleIcon />
-              <span>Icons</span>
-            </a>
-            <a
-              className={`nav-ext ${page === "guide" ? "is-active" : ""}`}
-              href="#guide"
-              role="menuitem"
-              aria-current={page === "guide" ? "page" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                go("guide");
-                setNavOpen(false);
-              }}
-            >
-              <NavGuideIcon />
-              <span>Guide</span>
-            </a>
-            <a
-              className={`nav-ext ${page === "packages" ? "is-active" : ""}`}
-              href="#packages"
-              role="menuitem"
-              aria-current={page === "packages" ? "page" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                go("packages");
-                setNavOpen(false);
-              }}
-            >
-              <span>Packages</span>
-            </a>
+            {SITE_NAV.map((item) =>
+              "current" in item && item.current ? (
+                <a
+                  key={item.label}
+                  className={`nav-ext ${page === "icons" ? "is-active" : ""}`}
+                  href="#icons"
+                  role="menuitem"
+                  aria-current={page === "icons" ? "page" : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go("icons");
+                    setQuery("");
+                    setActiveGroup("all");
+                    setNavOpen(false);
+                  }}
+                >
+                  {item.label}
+                </a>
+              ) : (
+                <a
+                  key={item.label}
+                  className="nav-ext"
+                  href={item.href}
+                  role="menuitem"
+                  onClick={() => setNavOpen(false)}
+                >
+                  {item.label}
+                </a>
+              ),
+            )}
             <a
               className="nav-ext"
-              href={DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              role="menuitem"
-              onClick={() => setNavOpen(false)}
-            >
-              <DocsNavIcon />
-              <span>Docs</span>
-            </a>
-            <a
-              className="nav-ext"
-              href={`${REPO_URL}/issues/new`}
+              href={`${ICONS_REPO_URL}/issues/new`}
               target="_blank"
               rel="noopener noreferrer nofollow"
               role="menuitem"
@@ -1162,7 +1169,7 @@ export function App() {
             type="button"
             className="drawer-backdrop"
             aria-label="Close details"
-            onClick={() => setSelectedId(null)}
+            onClick={clearSelection}
           />
           <section className="drawer" aria-label={`${drawerTitle} details`}>
             <div className="drawer-preview-col">
@@ -1241,7 +1248,7 @@ export function App() {
                     type="button"
                     className="drawer-close"
                     aria-label="Close"
-                    onClick={() => setSelectedId(null)}
+                    onClick={clearSelection}
                   >
                     ×
                   </button>

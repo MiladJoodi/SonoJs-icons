@@ -12,7 +12,7 @@ import { renderIconTsx } from "./render-icon-tsx.mjs";
 
 const DEFAULT_REGISTRY =
   process.env.SONOJS_ICONS_REGISTRY ??
-  "https://raw.githubusercontent.com/sonojs/icons/master/registry";
+  "https://raw.githubusercontent.com/MiladJoodi/SonoJs-icons/master/registry";
 
 async function defaultOutDir(cwd = process.cwd()) {
   const hasSrc = await fileExists(join(cwd, "src"));

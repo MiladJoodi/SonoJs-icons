@@ -4,6 +4,14 @@
   "description": "SonoJS brand React icons — CLI copy into your project.",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://icons.sonojs.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MiladJoodi/SonoJs-icons.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MiladJoodi/SonoJs-icons/issues"
+  },
   "bin": {
     "sonojs-icons": "./cli/index.mjs"
   },

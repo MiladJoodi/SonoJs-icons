@@ -70,8 +70,12 @@ html[data-theme="light"] {
   --text: var(--foreground);
   --muted: var(--muted-foreground);
   --border-subtle: #e4e4e7;
-  /* Code snippets stay Dark+ in both themes */
-  --code-bg: #1e1e1e;
+  /* Soft gray code blocks (not black) in light theme */
+  --code-bg: #f4f4f5;
+  --code-fg: #3f3f46;
+  --code-border: #e4e4e7;
+  --code-header-bg: #e4e4e7;
+  --code-header-fg: #71717a;
   --btn: #f4f4f5;
   --btn-hover: #e4e4e7;
   --nav-bg: rgba(255, 255, 255, 0.85);
@@ -135,29 +139,31 @@ a {
 .nav-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-inline-end: 8px;
   text-decoration: none;
   flex-shrink: 0;
   color: var(--text);
+  outline: none;
 }
 
-.nav-brand-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  line-height: 1.05;
+.nav-brand:focus-visible {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--ring, #2563eb);
+}
+
+.nav-brand-logo {
+  height: 22px;
+  width: auto;
+  flex-shrink: 0;
+  display: block;
 }
 
 .nav-brand-text {
-  font-size: 1.12rem;
-  font-weight: 750;
-  letter-spacing: -0.01em;
-}
-
-.nav-brand-sub {
-  font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.025em;
 }
 
 .nav-links {
@@ -170,22 +176,27 @@ a {
 
 .nav-links a {
   text-decoration: none;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 0.84rem;
+  padding: 4px 10px;
+  border-radius: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--muted);
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s;
   white-space: nowrap;
 }
 
 .nav-links a:hover {
   color: var(--text);
-  background: var(--tile);
+  background: transparent;
 }
 
-.nav-links a.active {
-  color: var(--text);
-  font-weight: 550;
+.nav-links a.active,
+.nav-links a.is-active {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 8px;
 }
 
 .nav-sep {
@@ -202,32 +213,30 @@ a {
   gap: 6px;
 }
 
-.nav-ext.is-active {
-  color: var(--accent);
-  font-weight: 600;
-}
-
 .nav-ext svg {
   flex-shrink: 0;
   opacity: 0.85;
 }
 
-.nav-contribute {
+.nav-links a.nav-contribute {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-inline-start: 4px;
-  padding: 6px 10px;
-  border-radius: 999px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--bg-soft);
-  color: var(--text) !important;
+  background: transparent;
+  color: var(--text);
   font-weight: 550;
+  text-decoration: none;
 }
 
-.nav-contribute:hover {
-  border-color: var(--accent);
-  background: var(--tile-hover);
+.nav-links a.nav-contribute:hover {
+  border-color: var(--text);
+  background: transparent;
+  color: var(--text);
 }
 
 .nav-controls {
@@ -1735,7 +1744,7 @@ html[data-theme="dark"] .drawer-preview.drawer-preview--light-pad {
   }
 }
 
-/* Import snippet — VS Code Dark+ (dark bg in both page themes) */
+/* Import snippet — follows theme code tokens */
 .import-block {
   position: relative;
   margin-top: 2px;
@@ -1767,6 +1776,16 @@ html[data-theme="dark"] .drawer-preview.drawer-preview--light-pad {
   background: rgba(255, 255, 255, 0.18);
 }
 
+html[data-theme="light"] .import-copy {
+  background: rgba(9, 9, 11, 0.04);
+  color: #71717a;
+}
+
+html[data-theme="light"] .import-copy:hover {
+  color: #09090b;
+  background: rgba(9, 9, 11, 0.08);
+}
+
 .import-code {
   margin: 0;
   padding-block: 8px;
@@ -1790,7 +1809,7 @@ html[data-theme="dark"] .drawer-preview.drawer-preview--light-pad {
   white-space: pre;
 }
 
-/* Dark+ tokens — code blocks keep dark bg in both page themes */
+/* Dark+ tokens (dark theme) */
 .tok-kw {
   color: #569cd6;
 }
@@ -1805,6 +1824,27 @@ html[data-theme="dark"] .drawer-preview.drawer-preview--light-pad {
 
 .tok-punc {
   color: #d4d4d4;
+}
+
+/* Readable tokens on light gray code bg */
+html[data-theme="light"] .tok-kw {
+  color: #0550ae;
+}
+
+html[data-theme="light"] .tok-id {
+  color: #0a7b6a;
+}
+
+html[data-theme="light"] .tok-str {
+  color: #a31515;
+}
+
+html[data-theme="light"] .tok-num {
+  color: #098658;
+}
+
+html[data-theme="light"] .tok-punc {
+  color: #52525b;
 }
 
 @media (max-width: 720px) {
